@@ -7,7 +7,8 @@
 @font-face { font-family: 'Newsreader'; src: url(fonts/newsreader-latin.woff2) format('woff2'); font-weight: 200 800; }
 @font-face { font-family: 'Instrument Sans'; src: url(fonts/instrument-sans-latin.woff2) format('woff2'); font-weight: 400 700; }
 :root { --paper: #f4f1ea; --ink: #1c1b18; --sage: #b8c3ab; --sage-hi: #c6d0ba; }
-html, body { margin: 0; background: var(--paper); overflow: hidden; }
+html, body { margin: 0; background: var(--paper); overflow: hidden; -webkit-user-select: none; user-select: none; }
+::selection { background: transparent; }
 #stage { position: relative; width: var(--W); height: var(--H); overflow: hidden; }
 .layer { position: absolute; inset: 0; }
 #scene { background: radial-gradient(120% 90% at 50% 42%, var(--sage-hi) 0%, var(--sage) 62%, #aebaa1 100%); }
@@ -146,8 +147,8 @@ window.setup = async ({ shot, W: w, H: h, page, origin, project }) => {
   // Every load of the frame (the first, and any reload) gets the pointer feed.
   $('#page').addEventListener('load', () => {
     try { win().addEventListener('lux:demo-pointer', onPointer); } catch {}
-    // the product's tour pill has no part in the film; a shot can add its own rules (S.css)
-    try { const s = doc().createElement('style'); s.textContent = 'button[aria-label="Take the tour"]{display:none!important}' + (S.css ?? ''); doc().head.appendChild(s); } catch {}
+    // the product's tour pill has no part in the film, nor a selection a drag leaves behind; a shot can add its own rules (S.css)
+    try { const s = doc().createElement('style'); s.textContent = 'button[aria-label="Take the tour"]{display:none!important}::selection{background:transparent!important;color:inherit!important}' + (S.css ?? ''); doc().head.appendChild(s); } catch {}
   });
   await new Promise(r => { $('#page').addEventListener('load', r, { once: true }); $('#page').src = page; });
   return true;
