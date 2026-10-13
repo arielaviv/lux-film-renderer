@@ -1,0 +1,117 @@
+name: film
+
+# Renders a product film (factory/video) on a runner, against the live app, signed in with an exported session
+# (secret LUX_FILM_STATE, from factory/video/tools/export-state.mjs). Everything the render writes (frames, video,
+# log) comes back as one encrypted file (secret FILM_KEY); the run's public log shows only progress.
+#   gh workflow run film.yml -f shot=bayside -f mode=stills
+#   open: openssl enc -d -aes-256-cbc -pbkdf2 -pass file:<key> -in film.enc | tar xz
+on:
+  workflow_dispatch:
+    inputs:
+      shot:
+        description: the shot (comp/shots/<shot>.js)
+        default: bayside
+      mode:
+        description: what to render
+        type: choice
+        # stills: the shot's own stills, a check pass; review: a 30 fps cut to review; video/vertical/all: the final
+        options: [stills, review, video, vertical, all]
+        default: stills
+      stills:
+        description: still times in seconds, comma-separated (blank = the shot's own)
+        default: ""
+
+permissions:
+  contents: read
+
+# one render per shot at a time: a render resets the shot's demo project, two would reset each other
+concurrency:
+  group: film-${{ inputs.shot }}
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      PW_VERSION: "1.57.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: browser and ffmpeg
+        run: |
+          npm i --prefix "$RUNNER_TEMP/pw" "playwright-core@$PW_VERSION" > /dev/null
+          npx -y "playwright@$PW_VERSION" install --with-deps chromium > /dev/null
+          command -v ffmpeg >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; } > /dev/null
+          ffmpeg -version | head -1
+
+      - name: the session
+        env:
+          LUX_FILM_STATE: ${{ secrets.LUX_FILM_STATE }}
+          FILM_KEY: ${{ secrets.FILM_KEY }}
+        run: |
+          [ -n "$LUX_FILM_STATE" ] || { echo "the secret LUX_FILM_STATE is empty"; exit 1; }
+          [ -n "$FILM_KEY" ] || { echo "the secret FILM_KEY is empty"; exit 1; }
+          printf '%s' "$LUX_FILM_STATE" > "$RUNNER_TEMP/state.json"
+
+      - name: render
+        env:
+          PW_PATH: ${{ runner.temp }}/pw/node_modules/playwright-core
+          PW_CHANNEL: chromium
+          SHOT: ${{ inputs.shot }}
+          MODE: ${{ inputs.mode }}
+          STILLS: ${{ inputs.stills }}
+        working-directory: factory/video
+        run: |
+          set -o pipefail
+          mkdir -p out
+          # the full log goes into the encrypted bundle; here, only how far the clock has got
+          render() {
+            log="out/$1.log"; shift
+            node render.mjs --shot "$SHOT" --state "$RUNNER_TEMP/state.json" --ready 240 "$@" 2>&1 \
+              | tee "$log" | { grep --line-buffered -E '^(t=[0-9]|workspace ready|wrote )' | sed -E 's/  per frame.*//' || true; }
+          }
+          case "$MODE" in
+            # a check pass: a coarse clock, a plain-resolution frame (a software GPU's cost goes with pixels)
+            stills)
+              render stills --stills "${STILLS:-auto}" --fps 15 --dpr 1 ;;
+            # a cut to review: 30 fps, plain resolution
+            review)
+              render review --fps 30 --dpr 1 --out "out/$SHOT-review.mp4"
+              sh sheet.sh "out/$SHOT-review.mp4" "out/$SHOT-review-sheet.jpg" ;;
+            # the final: 60 fps, supersampled
+            video)
+              render video --dpr 1.5
+              sh sheet.sh "out/$SHOT.mp4" "out/$SHOT-sheet.jpg" ;;
+            vertical)
+              render vertical --vertical --dpr 1.5 ;;
+            all)
+              render video --dpr 1.5
+              sh sheet.sh "out/$SHOT.mp4" "out/$SHOT-sheet.jpg"
+              render vertical --vertical --dpr 1.5 ;;
+            *)
+              echo "unknown mode: $MODE"; exit 1 ;;
+          esac
+
+      - name: seal
+        if: always()
+        env:
+          FILM_KEY: ${{ secrets.FILM_KEY }}
+        working-directory: factory/video
+        run: |
+          mkdir -p out
+          tar czf - -C out . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:FILM_KEY -out "$RUNNER_TEMP/film.enc"
+          rm -rf out "$RUNNER_TEMP/state.json"
+          ls -la "$RUNNER_TEMP/film.enc" | awk '{print $5 " bytes sealed"}'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: film-${{ inputs.shot }}-${{ inputs.mode }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/film.enc
+          if-no-files-found: warn
+          retention-days: 14

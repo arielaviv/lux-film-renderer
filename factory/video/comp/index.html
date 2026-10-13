@@ -1,0 +1,326 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>film comp</title>
+<style>
+@font-face { font-family: 'Newsreader'; src: url(fonts/newsreader-latin.woff2) format('woff2'); font-weight: 200 800; }
+@font-face { font-family: 'Instrument Sans'; src: url(fonts/instrument-sans-latin.woff2) format('woff2'); font-weight: 400 700; }
+:root { --paper: #f4f1ea; --ink: #1c1b18; --sage: #b8c3ab; --sage-hi: #c6d0ba; }
+html, body { margin: 0; background: var(--paper); overflow: hidden; }
+#stage { position: relative; width: var(--W); height: var(--H); overflow: hidden; }
+.layer { position: absolute; inset: 0; }
+#scene { background: radial-gradient(120% 90% at 50% 42%, var(--sage-hi) 0%, var(--sage) 62%, #aebaa1 100%); }
+#cam { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#win { position: absolute; left: 0; top: 0; width: 1440px; border-radius: 14px; overflow: hidden; background: #fff;
+  box-shadow: 0 0 0 1px rgb(30 40 25 / 0.07), 0 2px 6px rgb(30 40 25 / 0.06), 0 24px 70px -10px rgb(30 45 25 / 0.28); }
+#bar { height: 52px; background: #f1f1ee; border-bottom: 1px solid #e3e3df; position: relative; }
+.dots { position: absolute; left: 20px; top: 20px; display: flex; gap: 8px; }
+.dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.12); }
+.dots i:nth-child(1) { background: #f0645a; } .dots i:nth-child(2) { background: #f3bd3c; } .dots i:nth-child(3) { background: #5ec453; }
+.url { position: absolute; left: 50%; top: 11px; transform: translateX(-50%); height: 30px; min-width: 460px; padding: 0 18px; box-sizing: border-box;
+  border-radius: 9px; background: #e7e7e3; display: flex; align-items: center; justify-content: center; gap: 7px;
+  font: 500 13.5px/1 'Instrument Sans', system-ui, sans-serif; color: #55554f; letter-spacing: 0.005em; }
+.url svg { width: 11px; height: 11px; }
+#page { display: block; width: 1440px; height: 900px; border: 0; background: #f5f6f8; }
+#cursor { position: absolute; left: 0; top: 0; pointer-events: none; transform-origin: 0 0; will-change: auto; }
+#cursor svg { display: block; overflow: visible; filter: drop-shadow(0 1.2px 1.6px rgb(0 0 0 / 0.32)); }
+.card { display: flex; align-items: center; justify-content: center; flex-direction: column; background: var(--paper); text-align: center; }
+.serif { font-family: 'Newsreader', Georgia, serif; font-weight: 400; font-style: normal; color: var(--ink);
+  font-variation-settings: "opsz" 72; letter-spacing: -0.012em; line-height: 1.08; text-wrap: balance; }
+#title .serif { font-size: calc(var(--u) * 92px); max-width: calc(var(--u) * 1500px); padding: 0 calc(var(--u) * 80px); }
+#end-url .serif { font-size: calc(var(--u) * 84px); }
+#end-logo img { width: calc(var(--u) * 420px); filter: brightness(0); opacity: .9; }
+/* A folder window on the ground beside the browser: the files a shot drags in. World coordinates, like #win. */
+#folder { position: absolute; left: -440px; top: 150px; width: 360px; background: #f6f6f4; border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 18px 48px rgba(20,30,10,.22); overflow: hidden; font-family: 'Instrument Sans', system-ui, sans-serif; }
+#folder .fbar { height: 38px; background: #ececea; border-bottom: 1px solid #dddcd8; display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+#folder .fbar i { width: 12px; height: 12px; border-radius: 50%; background: #d4d2cc; display: block; }
+#folder .fbar span { margin-left: 8px; font-size: 13px; color: #6f6e69; }
+#folder .file { display: flex; align-items: center; gap: 12px; padding: 11px 16px; font-size: 15px; color: #2a2a28; border-bottom: 1px solid #f0efeb; }
+#folder .file::before { content: ''; width: 22px; height: 28px; background: #fff; border: 1px solid #b9b9b4; border-radius: 3px; flex: none; }
+#folder .file .size { margin-left: auto; font-size: 12px; color: #8a8883; }
+#folder .file.away { opacity: .35; }
+#ghost { position: absolute; width: 30px; height: 38px; background: #fff; border: 1px solid #b9b9b4; border-radius: 3px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.28); transform: translate(6px, 6px); }
+.layer, .card > * { will-change: opacity, transform; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="scene">
+    <div id="cam">
+      <div id="win">
+        <div id="bar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          <div class="url"><svg viewBox="0 0 12 12"><rect x="2.2" y="5.2" width="7.6" height="5.6" rx="1.3" fill="#77776f"/><path d="M3.9 5.4V4a2.1 2.1 0 0 1 4.2 0v1.4" fill="none" stroke="#77776f" stroke-width="1.3"/></svg><span id="url"></span></div>
+        </div>
+        <iframe id="page"></iframe>
+      </div>
+      <div id="folder" hidden></div>
+      <div id="ghost" hidden></div>
+      <div id="cursor"></div>
+    </div>
+  </div>
+  <div class="layer card" id="title"><div class="serif"></div></div>
+  <div class="layer card" id="end-url"><div class="serif"></div></div>
+  <div class="layer card" id="end-logo"><img alt=""></div>
+</div>
+<script type="module">
+import { ARROW, HAND, PRESS, cursorAt } from './cursor.js';
+
+const BAR = 52;
+const $ = s => document.querySelector(s);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smoother = u => u * u * u * (u * (u * 6 - 15) + 10);
+const sine = u => 0.5 - 0.5 * Math.cos(Math.PI * u);
+let S, P, W, H, shapeNow = '', nowT = 0;
+// The product frame, live: a reload (render.mjs does one when the workspace fails to load) replaces the
+// window object, and a reference kept from the first load would point at a dead document.
+const win = () => $('#page').contentWindow;
+const doc = () => $('#page').contentDocument;
+
+// The product's own hand: while it draws the ring (lux:demo-draw), the film's cursor rides its pointer
+// (lux:demo-pointer, iframe client px) and the real mouse stays out of the way.
+let follow = null;        // {x, y} world px while following
+let followEnded = null;   // where the hand let go — the next scripted move starts there
+let followPress = -1e9;   // when the hand last pressed, for the cursor's press animation
+const fired = new Set();  // beats already played
+const dropFiles = new Map(); // drop beat file name → File
+let ORIGIN = '';
+let navPending = null;       // a page the film is moving to, until its load event
+const drawAsked = new Map(); // draw beat → how many times the hand was asked
+let pointerSeen = false;     // the hand answered
+const resolved = new Map(); // lazy cursor targets, by move index
+
+// A person's keystrokes: uneven, slower after a space or a stop, fixed by a seed so every render matches.
+function keyTimes(text, cps) {
+  let s = 0x9e3779b9;
+  const rnd = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 10000) / 10000; };
+  const base = 1 / cps;
+  const out = []; let t = 0;
+  for (let i = 0; i < text.length; i++) {
+    const prev = text[i - 1] ?? '';
+    t += base * (0.62 + 0.76 * rnd()) + (prev === ' ' ? base * 0.35 : 0) + (/[.,!?]/.test(prev) ? base * 1.4 : 0);
+    out.push(t);
+  }
+  return out;
+}
+
+window.setup = async ({ shot, W: w, H: h, page, origin }) => {
+  W = w; H = h;
+  S = (await import(`./shots/${shot}.js`)).default;
+  const st = $('#stage').style;
+  st.setProperty('--W', W + 'px'); st.setProperty('--H', H + 'px');
+  st.setProperty('--u', String(W < H ? 0.9 : Math.min(W / 1920, H / 1080)));
+  $('#win').style.height = 900 + BAR + 'px';
+  $('#url').textContent = S.url;
+  $('#title .serif').textContent = S.title.text;
+  $('#end-url .serif').textContent = S.end.find(e => e.kind === 'url').text;
+  $('#end-logo img').src = origin + S.logo;
+  ORIGIN = origin;
+  if (S.folder) {
+    $('#folder').innerHTML = `<div class="fbar"><i></i><i></i><i></i><span>${S.folder.name ?? 'Bayside'}</span></div>` +
+      S.folder.files.map(f => `<div class="file" data-file="${f.name}"><span>${f.name}</span><span class="size">${f.size ?? ''}</span></div>`).join('');
+    $('#folder').hidden = false;
+  }
+  // The files a drop beat hands the page come from the comp's own assets, fetched before the clock starts.
+  for (const b of S.beats ?? []) {
+    if (b.do !== 'drop') continue;
+    const res = await fetch(`./assets/${b.file}`);
+    if (!res.ok) { console.error(`[film] no asset for drop: ${b.file}`); continue; }
+    dropFiles.set(b.file, new File([await res.blob()], b.file, { type: b.mime ?? 'application/octet-stream' }));
+  }
+  await document.fonts.ready;
+  let pointerLogged = false;
+  const onPointer = e => {
+    const d = e.detail || {};
+    pointerSeen = true;
+    if (!pointerLogged) { pointerLogged = true; console.error('[film] first pointer event', JSON.stringify(d)); }
+    if (d.type === 'mouseout') { followEnded = follow ?? followEnded; follow = null; return; }
+    if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) return;
+    follow = { x: d.x, y: d.y + BAR };
+    if (d.type === 'mousedown') followPress = nowT;
+  };
+  // Every load of the frame (the first, and any reload) gets the pointer feed.
+  $('#page').addEventListener('load', () => {
+    try { win().addEventListener('lux:demo-pointer', onPointer); } catch {}
+    // the product's tour pill has no part in the film; a shot can add its own rules (S.css)
+    try { const s = doc().createElement('style'); s.textContent = 'button[aria-label="Take the tour"]{display:none!important}' + (S.css ?? ''); doc().head.appendChild(s); } catch {}
+  });
+  await new Promise(r => { $('#page').addEventListener('load', r, { once: true }); $('#page').src = page; });
+  return true;
+};
+
+// Measure the UI the cursor will visit IN THE FILMED FRAME, once it is ready — not on a separate load, whose
+// layout can differ by a banner — and build the shot from those rects.
+window.arm = () => {
+  const d = doc();
+  // the browser's spellchecker has no opinion on the product's words (it underlined "GPON")
+  d.querySelectorAll('textarea, [contenteditable]').forEach(e => { e.spellcheck = false; });
+  const anchors = {};
+  for (const [k, sel] of Object.entries(S.anchors)) {
+    const el = d.querySelector(sel);
+    anchors[k] = el ? (r => ({ x: r.x, y: r.y, w: r.width, h: r.height }))(el.getBoundingClientRect()) : null;
+  }
+  P = S.build(anchors, BAR);
+  for (const b of P.beats ?? []) if (b.do === 'type') b.times = keyTimes(b.text, b.cps ?? 11);
+  return anchors;
+};
+
+// fade in over `a`, out over `b`
+const window01 = (t, i, o, a = 0.45, b = 0.45) => Math.min(sine(clamp((t - i) / a)), 1 - sine(clamp((t - o + b) / b)));
+
+// camera: each move eases centre (linear) and zoom (log) from the previous box to its own; overlapping moves add.
+function fit(box) { return { cx: box.x + box.w / 2, cy: box.y + box.h / 2, lz: Math.log(Math.min(W / box.w, H / box.h)) }; }
+function cameraAt(t) {
+  const c = P.camera; let prev = fit(c.start); const out = { ...prev };
+  for (const m of c.moves) {
+    const nxt = fit(W < H && m.vbox ? m.vbox : m.box), e = smoother(clamp((t - m.t0) / (m.t1 - m.t0)));
+    out.cx += (nxt.cx - prev.cx) * e; out.cy += (nxt.cy - prev.cy) * e; out.lz += (nxt.lz - prev.lz) * e;
+    prev = nxt;
+  }
+  out.lz += c.drift * (t - S.scene.in);
+  return { cx: out.cx, cy: out.cy, z: Math.exp(out.lz) };
+}
+
+// CSS animations and transitions inside the app follow the page's (virtual) clock, not wall time.
+function syncAnimations(d) {
+  const now = d.defaultView.performance.now();
+  for (const a of d.getAnimations()) {
+    if (!a.__v) { a.__v = { t0: now, c0: a.currentTime || 0 }; a.pause(); }
+    a.currentTime = a.__v.c0 + (now - a.__v.t0);
+  }
+  for (const f of d.querySelectorAll('iframe')) { try { if (f.contentDocument?.readyState !== 'loading') syncAnimations(f.contentDocument); } catch {} }
+}
+
+// what the OS would show over this point of the app: the hand where the page says cursor: pointer
+function shapeAt(x, y) {
+  const d = doc();
+  if (!d || !Number.isFinite(x) || !Number.isFinite(y)) return 'arrow';
+  const el = d.elementFromPoint(x, y - BAR);
+  return el && win().getComputedStyle(el).cursor === 'pointer' ? 'hand' : 'arrow';
+}
+
+// a cursor move's target may be a selector inside the app (measured when the cursor sets off, held after),
+// and a move may start where the product's hand let go
+function resolveMove(m, i) {
+  let to = resolved.get(i);
+  if (to === undefined) {
+    if (typeof m.to === 'string') {
+      const el = doc() && doc().querySelector(m.to);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      to = [r.x + r.width * (m.ax ?? 0.5), r.y + BAR + r.height * (m.ay ?? 0.5)];
+      // A control that moves before the cursor leaves for it (the prompt box grows when the area's pin lands)
+      // is measured afresh every frame until `measureAt`; from then on the rect is kept, so the path is stable.
+      if (m.measureAt == null || nowT >= m.measureAt) resolved.set(i, to);
+    } else {
+      to = typeof m.to === 'function' ? m.to() : m.to;
+      resolved.set(i, to);
+    }
+  }
+  // where the hand let go, as the [x, y] the cursor math works in
+  const from = m.from === 'follow' ? (followEnded ? [followEnded.x, followEnded.y] : undefined) : m.from;
+  return from ? { to, from } : { to };
+}
+
+// Hand the page a file the way a person does: enter, hover, drop — three real drag events on the element
+// under the cursor, each carrying a DataTransfer with the File in it (the product listens on its window).
+function dropAt(name, x, y) {
+  const file = dropFiles.get(name);
+  const d = doc();
+  if (!file || !d) { console.error(`[film] drop of ${name} had nothing to drop`); return; }
+  const dt = new (win().DataTransfer)();
+  dt.items.add(file);
+  const target = d.elementFromPoint(x, y) ?? d.body;
+  for (const type of ['dragenter', 'dragover', 'drop']) {
+    target.dispatchEvent(new (win().DragEvent)(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }));
+  }
+  console.error(`[film] dropped ${name} (${file.size} bytes) at ${Math.round(x)},${Math.round(y)}`);
+}
+
+window.frame = t => {
+  nowT = t;
+  const vis = (id, o) => { const s = $(id).style; s.opacity = o.toFixed(4); s.visibility = o > 0.001 ? 'visible' : 'hidden'; };
+  vis('#title', window01(t, -1, S.title.out, 0.01, 0.55));
+  const tt = $('#title .serif').style;
+  const ti = Math.min(sine(clamp((t - 0.15) / 0.9)), 1 - sine(clamp((t - S.title.out + 0.75) / 0.3)));
+  tt.opacity = ti.toFixed(4); tt.transform = `translateY(${(1 - ti) * 14}px)`;
+  for (const e of S.end) {
+    const id = e.kind === 'url' ? '#end-url' : '#end-logo';
+    vis(id, window01(t, e.in, e.kind === 'logo' ? 99 : e.out, 0.5, 0.01));
+    const k = sine(clamp((t - e.in - 0.1) / 0.9)), s = $(id).firstElementChild.style;
+    s.opacity = k.toFixed(4); s.transform = `translateY(${(1 - k) * 12}px)`;
+  }
+  vis('#scene', t < S.scene.out ? 1 : 0);
+
+  const cam = cameraAt(t);
+  $('#cam').style.transform = `translate(${W / 2}px, ${H / 2}px) scale(${cam.z}) translate(${-cam.cx}px, ${-cam.cy}px)`;
+
+  // beats: the product's hand, a key, a typed line
+  const out = { typed: undefined, key: undefined };
+  (P.beats ?? []).forEach((b, i) => {
+    if (t < b.at) return;
+    if (b.do === 'type') {
+      if (!b.spellOff) { b.spellOff = true; try { const a = doc().activeElement; if (a && 'spellcheck' in a) a.spellcheck = false; } catch {} }
+      out.typed = b.text.slice(0, b.times.filter(x => x <= t - b.at).length);
+      return;
+    }
+    if (b.do === 'draw') {
+      // The app attaches its hand once the map is up; a request that lands before that is lost. Ask, and ask
+      // again every 1.5 s until the hand's first pointer event arrives (it comes ~0.5 s after a request lands).
+      if (pointerSeen) return;
+      const asked = drawAsked.get(i) ?? 0;
+      if (t >= b.at + asked * 1.5 && asked < 4) {
+        drawAsked.set(i, asked + 1);
+        win().dispatchEvent(new CustomEvent('lux:demo-draw', { detail: { ring: S.ring } }));
+        console.error(`[film] asked the hand to draw (${asked + 1})`);
+      }
+      return;
+    }
+    if (b.do === 'drop') {
+      // The file rides the cursor from `b.at - b.dur` and lands at `b.at`: real drag events into the product's
+      // window with a real File, at the cursor's position on the page.
+      const inFlight = t >= b.at - (b.dur ?? 1.2) && t < b.at;
+      $('#ghost').hidden = !inFlight;
+      $('#folder')?.querySelectorAll('.file').forEach(el => el.classList.toggle('away', el.dataset.file === b.file && t >= b.at - (b.dur ?? 1.2)));
+      if (fired.has(i)) return;
+      fired.add(i);
+      out.drop = { file: b.file };
+      return;
+    }
+    if (fired.has(i)) return;
+    fired.add(i);
+    if (b.do === 'key') out.key = b.key;
+    if (b.do === 'nav') {
+      navPending = b.path;
+      console.error(`[film] moving to ${b.path}`);
+      $('#page').src = ORIGIN + b.path + (b.path.includes('?') ? '&' : '?') + 'tours=off';
+    }
+  });
+
+  const C = P.cursor, cur = cursorAt(t, C.start, C.moves, C.presses, resolveMove);
+  let pos = cur.pos, scale = cur.scale, realMouse = true;
+  if (follow) {
+    pos = [follow.x, follow.y]; realMouse = false;
+    const k = clamp((t - followPress) / 0.03) * (1 - sine(clamp((t - followPress - PRESS) / 0.07)));
+    scale = 1 - 0.1 * k;
+  }
+  const alpha = sine(clamp((t - C.fade[0]) / (C.fade[1] - C.fade[0]))) * (t < S.scene.out ? 1 : 0);
+  const shape = shapeAt(pos[0], pos[1]) === 'hand' ? HAND : ARROW;
+  if (shape !== shapeNow) { $('#cursor').innerHTML = `<svg width="24" height="27" viewBox="0 0 24 27">${shape.svg}</svg>`; shapeNow = shape; }
+  const k = 1.12; // cursor size in page px per svg unit (a 1x macOS cursor is ~20 px tall)
+  const cs = $('#cursor').style;
+  cs.opacity = alpha.toFixed(4);
+  cs.transform = `translate(${pos[0]}px, ${pos[1]}px) scale(${k * scale}) translate(${-shape.hot[0]}px, ${-shape.hot[1]}px)`;
+  $('#ghost').style.transform = `translate(${pos[0]}px, ${pos[1]}px)`;
+  if (out.drop) dropAt(out.drop.file, pos[0], pos[1] - BAR);
+
+  syncAnimations(document);
+  const sx = (pos[0] - cam.cx) * cam.z + W / 2, sy = (pos[1] - cam.cy) * cam.z + H / 2;
+  return { mouse: realMouse && alpha > 0.5 ? [sx, sy] : null, down: realMouse ? cur.down : false, follow: !!follow, ...out };
+};
+</script>
+</body>
+</html>
