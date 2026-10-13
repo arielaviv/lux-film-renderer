@@ -138,7 +138,7 @@ if (S.seedStep) {
   // project the film owns. It runs as the signed-in admin, through the page's own session.
   let seeded = null;
   for (let attempt = 1; attempt <= 4 && !seeded; attempt++) {
-    const res = await ctx.request.post(`${ORIGIN}/api/org/seed-demo`, { data: { step: S.seedStep }, timeout: 280000 });
+    const res = await ctx.request.post(`${ORIGIN}/api/org/seed-demo`, { data: { step: S.seedStep }, timeout: 280000 }).catch(e => ({ ok: () => false, status: () => 'timeout', text: async () => e.message }));
     const text = await res.text();
     if (res.ok()) {
       const body = JSON.parse(text);
@@ -154,7 +154,8 @@ if (S.seedStep) {
 } else if (S.project) {
   let reset;
   for (let attempt = 1; attempt <= 4; attempt++) {
-    reset = await ctx.request.post(`${ORIGIN}/api/projects/${S.project}/demo/reset`);
+    // a few hundred files rewritten: slow when other takes share the database, so wait long and ask again
+    reset = await ctx.request.post(`${ORIGIN}/api/projects/${S.project}/demo/reset`, { timeout: 280000 }).catch(e => ({ ok: () => false, status: () => 'timeout', text: async () => e.message }));
     if (reset.ok()) break;
     console.log('reset failed', reset.status(), (await reset.text()).slice(0, 120), `(attempt ${attempt})`);
     await boot.waitForTimeout(5000);
