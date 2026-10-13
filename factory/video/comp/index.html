@@ -88,6 +88,7 @@ let followPress = -1e9;   // when the hand last pressed, for the cursor's press 
 const fired = new Set();  // beats already played
 const dropFiles = new Map(); // drop beat file name → File
 let ORIGIN = '';
+let PROJECT = null;          // the shot's demo project, once the seed has laid it down
 let navPending = null;       // a page the film is moving to, until its load event
 const drawAsked = new Map(); // draw beat → how many times the hand was asked
 let pointerSeen = false;     // the hand answered
@@ -107,8 +108,8 @@ function keyTimes(text, cps) {
   return out;
 }
 
-window.setup = async ({ shot, W: w, H: h, page, origin }) => {
-  W = w; H = h;
+window.setup = async ({ shot, W: w, H: h, page, origin, project }) => {
+  W = w; H = h; PROJECT = project;
   S = (await import(`./shots/${shot}.js`)).default;
   const st = $('#stage').style;
   st.setProperty('--W', W + 'px'); st.setProperty('--H', H + 'px');
@@ -294,9 +295,21 @@ window.frame = t => {
     fired.add(i);
     if (b.do === 'key') out.key = b.key;
     if (b.do === 'nav') {
-      navPending = b.path;
-      console.error(`[film] moving to ${b.path}`);
-      $('#page').src = ORIGIN + b.path + (b.path.includes('?') ? '&' : '?') + 'tours=off';
+      // `{project}` is the shot's demo project, known only once the seed has run
+      const to = b.path.replaceAll('{project}', PROJECT ?? '');
+      navPending = to;
+      console.error(`[film] moving to ${to}`);
+      $('#page').src = ORIGIN + to + (to.includes('?') ? '&' : '?') + 'tours=off';
+    }
+    if (b.do === 'select') {
+      // a native <select> opens an OS menu no screenshot sees: the cursor clicks it, the choice lands here, as
+      // React hears a person's (the native value setter, then a bubbling change)
+      const el = doc()?.querySelector(b.sel);
+      if (!el) { console.error(`[film] no select for ${b.sel}`); return; }
+      Object.getOwnPropertyDescriptor(win().HTMLSelectElement.prototype, 'value').set.call(el, b.value);
+      el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
+      el.dispatchEvent(new (win().Event)('change', { bubbles: true }));
+      console.error(`[film] chose ${b.value} in ${b.sel}`);
     }
   });
 

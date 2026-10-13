@@ -132,7 +132,8 @@ await boot.evaluate(() => window.Clerk?.session?.getToken({ skipCache: true })).
 // ---- 1. a fresh story: the demo project reset (what Play presses first), and the session the film opens.
 // A shot without a project names its page (`path`): a desk of the app, read as it is, nothing reset.
 // The reset rewrites a few hundred files; the app answers 500 now and then under load, so ask again.
-let PAGE;
+// A shot on a demo project can open one of its pages instead of the workspace (`view`, '/projects/{project}/riser').
+let PAGE, PROJECT = null;
 if (S.seedStep) {
   // The seed lays the demo project down or resets it, and opens a fresh session on it — what Play does, for a
   // project the film owns. It runs as the signed-in admin, through the page's own session.
@@ -149,6 +150,7 @@ if (S.seedStep) {
     if (!seeded) await boot.waitForTimeout(5000);
   }
   if (!seeded) { console.error(`the seed step ${S.seedStep} kept failing`); await shutdown(); process.exit(1); }
+  PROJECT = seeded.project;
   PAGE = `/projects/${seeded.project}?session=${seeded.session}&tours=off`;
   console.log('seeded', S.seedStep, '→ project', seeded.project, 'session', seeded.session);
 } else if (S.project) {
@@ -162,11 +164,18 @@ if (S.seedStep) {
   }
   if (!reset.ok()) { console.error('the demo reset kept failing'); await shutdown(); process.exit(1); }
   const { sessionId } = await reset.json();
+  PROJECT = S.project;
   PAGE = `/projects/${S.project}?session=${sessionId}&tours=off`;
   console.log('session', sessionId);
 } else {
   PAGE = S.path + (S.path.includes('?') ? '&' : '?') + 'tours=off';
   console.log('page', PAGE);
+}
+
+if (S.view && PROJECT) {
+  const v = S.view.replaceAll('{project}', PROJECT);
+  PAGE = v + (v.includes('?') ? '&' : '?') + 'tours=off';
+  console.log('view', PAGE);
 }
 
 await boot.goto('about:blank');
@@ -194,7 +203,7 @@ const NOW = Date.now();
 await page.clock.install({ time: NOW });
 await page.clock.pauseAt(NOW + 1000);
 await page.goto(`${ORIGIN}${FILM}index.html`);
-await page.evaluate(a => window.setup(a), { shot, W, H, page: ORIGIN + PAGE, origin: ORIGIN });
+await page.evaluate(a => window.setup(a), { shot, W, H, page: ORIGIN + PAGE, origin: ORIGIN, project: PROJECT });
 
 // let the app settle (network is real, time is not): step the clock in small slices until the workspace is in.
 // The budget is real time (--ready seconds): a software GPU brings the map up much later than a real one.
